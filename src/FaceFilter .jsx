@@ -2,9 +2,11 @@ import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import * as faceapi from "face-api.js";
-
-const FaceFilter = () => {
+import "./face.css";
+import { useGLTF } from "@react-three/drei";
+const FaceFilter = (props) => {
   const modelRef = useRef();
+  const modelContainerRef = useRef();
   useEffect(() => {
     const startFaceDetection = async () => {
       // Load face-api.js models
@@ -20,10 +22,11 @@ const FaceFilter = () => {
         0.1,
         1000
       );
-      const renderer = new THREE.WebGLRenderer();
+      const renderer = new THREE.WebGLRenderer({ alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-      renderer.setClearColor(0xf0f0f0);
+      renderer.setClearColor(0x000000, 0);
+      renderer.domElement.style.position = "absolute"; // Transparent background color
+      renderer.domElement.style.top = "0px"; // Transparent background color
 
       // Load 3D model
       const loader = new GLTFLoader();
@@ -32,8 +35,8 @@ const FaceFilter = () => {
         (gltf) => {
           console.log(gltf);
           modelRef.current = gltf.scene;
-          modelRef.current.position.set(0, 0, 0);
           scene.add(modelRef.current);
+          modelContainerRef.current.appendChild(modelRef.current);
         },
         function (xhr) {},
         // called when loading has errors
@@ -42,7 +45,7 @@ const FaceFilter = () => {
         }
       );
 
-      camera.position.z = 40;
+      camera.position.z = 45;
 
       // Set up video element for face detection
       const video = document.createElement("video");
@@ -58,17 +61,28 @@ const FaceFilter = () => {
         video.play();
         console.log(video);
       });
+      let basePointX = null;
+      let basePointY = null;
       video.addEventListener("play", () => {
-        // video.style.width = "1000px";
-        // video.style.height = "1000px";
-        const canvas = faceapi.createCanvasFromMedia(video);
-        document.body.appendChild(canvas);
-
+        video.style.width = `${window.innerWidth}px`;
+        video.style.height = `${window.innerHeight}px`;
+        // const canvas = faceapi.createCanvasFromMedia(video);
+        // canvas.classList.add("modelCanvas");
+        // document.body.appendChild(canvas);
+        renderer.domElement.style.width = `${window.innerWidth}px`; // Transparent background color
+        renderer.domElement.style.height = `${window.innerHeight}px`; // Transparent background color
         const displaySize = {
           width: video.videoWidth,
           height: video.videoWidth,
         };
-        faceapi.matchDimensions(canvas, displaySize);
+        // faceapi.matchDimensions(canvas, displaySize);
+        document.body.appendChild(renderer.domElement);
+
+        // Face detection loop
+        // Initialize an array to store the last few positions
+
+        // Face detection loop
+        let prevFacePosition = new THREE.Vector3();
 
         // Face detection loop
         setInterval(async () => {
@@ -82,70 +96,49 @@ const FaceFilter = () => {
             detections,
             displaySize
           );
-          canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-          faceapi.draw.drawDetections(canvas, resizedDetections);
-          faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
 
-          // Update Three.js scene based on face detection results
-          // (customize this part based on your specific use case)
-          if (modelRef.current && resizedDetections.length > 0) {
+          if (modelContainerRef.current && resizedDetections.length > 0) {
             const faceLandmarks = resizedDetections[0].landmarks;
-            const nose = faceLandmarks.getNose();
-            const mouth = faceLandmarks.getMouth();
-            const leftEye = faceLandmarks.getLeftEye();
-            const RightEye = faceLandmarks.getRightEye();
-            const jawline = faceLandmarks.getJawOutline();
-            // console.log(faceLandmarks.getMouth());
-            const nosePosition = new THREE.Vector3(
-              resizedDetections[0]?.detection?._box?._x,
-              resizedDetections[0]?.detection?._box?._y,
-              modelRef.current.children[1].position?.z
+            const nose = faceLandmarks.getMouth();
+            const currentFacePosition = new THREE.Vector3(
+              nose[0].x,
+              nose[0].y,
+              0
             ); // Adjust 50 based on your scene
-            const mouthPosition = new THREE.Vector3(
-              mouth[2].x,
-              mouth[2].y,
-              -19
-            ); // Adjust 50 based on your scene
-            // console.log(resizedDetections);
-            const leftEyePosition = new THREE.Vector3(0.2, 0.1, 50); // Adjust 50 based on your scene
-            const rightEyePosition = new THREE.Vector3(
-              RightEye[1].x,
-              RightEye[1].y,
-              50
-            ); // Adjust 1 based on your scene
-            // modelRef.current.traverse((child) => {
-            //   if (child.isMesh) {
-            //     const mesh = child;
-            //     // Access morph targets
-            //     if (mesh.morphTargetInfluences) {
-            //       console.log(mesh);
-            //       mesh.morphTargetInfluences[0] = 0.5; // Modify this value as needed
-            //     }
-            //   }
-            // });
-            // Set the position of the 3D model to the nose position
-            // modelRef.current.children[0].position.copy(leftEyePosition);
-            // modelRef.current.children[1].position.copy(rightEyePosition);
-            // modelRef.current.children[2].position.copy(mouthPosition);
-            // modelRef.current.children[4].position.copy(nosePosition);
-            // modelRef.current.children[5].position.copy(nosePosition);
-            modelRef.current.position.copy(nosePosition);
+            const leftEye = faceLandmarks.getLeftEye()[0];
+            const rightEye = faceLandmarks.getRightEye()[0];
 
-            // modelRef.current.children[0].morphTargetInfluences[0] = 0.5;
+            // Calculate the rotation angle based on the positions of the eyes
+            const deltaY = rightEye.y - leftEye.y;
+            const deltaX = rightEye.x - leftEye.x;
+            const rotationAngle = Math.atan2(deltaY, deltaX);
+
+            // Convert rotation angle from radians to degrees
+
+            // Set the rotation of the model
+            modelRef.current.rotation.z = rotationAngle;
+            // Calculate the difference between current and previous positions
+            const diffPosition = currentFacePosition
+              .clone()
+              .sub(prevFacePosition);
+            console.log(faceLandmarks);
+            // If this is not the first loop, apply the difference to the model's position
+            if (prevFacePosition.x !== 0 && prevFacePosition.y !== 0) {
+              modelRef.current.position.add(diffPosition);
+              //   modelRef.current.rotation.add(diffPosition);
+            }
+
+            // Update the previous position for the next loop
+            prevFacePosition = currentFacePosition.clone();
           }
-          //   modelRef.current.children[0].scale = new THREE.Vector3(0.5, 0.4, 0.8);
-          //   modelRef.current.children[0].position = new THREE.Vector3(
-          //     0.5,
-          //     0.4,
-          //     0.8
-          //   );
         }, 100);
-        video.style.zIndex = "100000";
+
+        console.log(scene, modelRef);
+        video.style.zIndex = "1";
         const animate = () => {
           requestAnimationFrame(animate);
           renderer.render(scene, camera);
         };
-        console.log(scene, modelRef);
         animate();
 
         // Animation loop for Three.js rendering
@@ -165,8 +158,58 @@ const FaceFilter = () => {
       modelRef.current = null;
     };
   }, []);
-
-  return <div />;
+  const { nodes, materials } = useGLTF(
+    "https://ishrostorage.blob.core.windows.net/container-3d/BAYCFaceARFinal.gltf"
+  );
+  console.log(nodes, materials);
+  return (
+    <group {...props} dispose={null}>
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Eye_L.geometry}
+        material={materials.Eyes}
+        position={[4.353, 6.967, 6.312]}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Eye_R.geometry}
+        material={materials.Eyes}
+        position={[-4.353, 6.967, 6.312]}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Cap.geometry}
+        material={materials.Zeebra_Line_Tshirt_Ape_Cap_n_Spects1}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Head.geometry}
+        material={materials.BodyZebraApe}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Teeth_Upper.geometry}
+        material={materials.MouthSet}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Tongue.geometry}
+        material={materials.MouthSet}
+      />
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={nodes.Teeth_Lower.geometry}
+        material={materials.MouthSet}
+      />
+    </group>
+  );
 };
 
 export default FaceFilter;

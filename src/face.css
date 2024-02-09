@@ -1,0 +1,12 @@
+.modelCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10000000; /* Ensure the canvas appears on top of the video */
+}
+
+.modelContainer {
+  top: 0;
+  left: 0;
+  z-index: 1100000; /* Ensure the canvas appears on top of the video */
+}
